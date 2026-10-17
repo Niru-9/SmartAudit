@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solidity Security Tools Bench (Qwen + Slither + Solhint)</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Solidity Security Tools Bench <span class="phase">(Qwen review + local Slither &amp; Solhint)</span></h1>
+    <div class="header-right">
+      <span id="toolBadge" class="badge" title="Local analyzer status">slither: checking... · solhint: checking...</span>
+      <span id="healthBadge" class="badge">checking...</span>
+      <span class="notice" title="AI-assisted review only; not a complete audit.">AI-assisted triage only — not a complete security audit.</span>
+    </div>
+  </header>
+
+  <div class="banner" id="globalNotice">
+    AI review output may be incomplete or incorrect and is not a complete security audit. Static-analysis findings come from the named tool only. Nothing here compiles, deploys, signs, or contacts a blockchain.
+  </div>
+
+  <div id="errorBanner" class="error-banner hidden"></div>
+
+  <main>
+    <section class="editor-panel">
+      <div class="panel-header">
+        <h2>Solidity source</h2>
+        <div class="controls">
+          <label for="modelSelect">Model</label>
+          <select id="modelSelect" disabled>
+            <option value="qwen2.5:3b">qwen2.5:3b</option>
+            <option value="qwen3:4b">qwen3:4b</option>
+          </select>
+          <button id="sampleBtn" title="Load a small reentrancy-vulnerable example">Load sample</button>
+          <button id="clearBtn">Clear</button>
+          <button id="reviewBtn" class="primary" disabled>Review with Qwen</button>
+          <button id="suggestBtn" disabled>Suggest safer code</button>
+        </div>
+      </div>
+      <textarea id="solidityInput" spellcheck="false" placeholder="// Paste Solidity code here, or click 'Load sample'"></textarea>
+      <div class="panel-footer">
+        <span id="charCount">0 chars</span>
+        <span id="elapsed" class="muted"></span>
+      </div>
+
+      <section class="panel" id="deployedPanel">
+        <div class="panel-header">
+          <h2>Deployed contract <span class="muted tag">(read-only verified source)</span></h2>
+          <div class="controls">
+            <span id="deployedPhaseBadge" class="badge">phase 6.3</span>
+          </div>
+        </div>
+        <div class="tool-note" id="deployedReadOnlyNotice">
+          Read-only. With your consent, <b>Retrieve &amp; review</b> fetches this contract's
+          <b>public verified source</b> and basic metadata from <b>Sourcify</b> and shows it here.
+          It never signs, sends transactions, deploys, or modifies a contract, and it does not
+          connect a wallet. Nothing is fetched until you click the button with consent ticked, and
+          retrieving the source runs <b>no analyzer and no model</b>. If the verified source is a
+          single complete Solidity file, you can then explicitly <b>analyze</b> it with the local
+          analyzers below — multi-file, incomplete, and non-Solidity sources are not analyzed.
+        </div>
+        <div class="deployed-form">
+          <div class="field">
+            <label for="chainSelect">Network</label>
+            <select id="chainSelect" aria-describedby="chainHelp">
+              <option value="" selected>Select a network…</option>
+            </select>
+            <span id="chainHelp" class="muted small-inline">Ethereum networks only: mainnet and the Sourcify-supported Ethereum testnets, each listed here with its chain ID. Base, Arbitrum, and other non-Ethereum networks are not supported. Nothing is selected by default — pick a network to enable a lookup. This is a network selection, not a wallet connection.</span>
+          </div>
+          <div class="field">
+            <label for="addressInput">Contract address</label>
+            <input id="addressInput" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="0x… (20-byte hex address)" aria-describedby="addressFeedback" />
+            <span id="addressFeedback" class="muted small-inline" role="status" aria-live="polite">
+              Enter a 20-byte hexadecimal EVM address.
+            </span>
+          </div>
+          <label class="consent-row" for="deployedConsent">
+            <input type="checkbox" id="deployedConsent" />
+            <span>I consent to a single <b>read-only</b> lookup of this contract's publicly verified
+              source (via Sourcify). No wallet, key, signature, transaction, deployment, or on-chain
+              write is involved.</span>
+          </label>
+          <div class="field">
+            <button id="deployedLookupBtn" type="button" disabled
+                    aria-describedby="deployedStatus">Retrieve &amp; review</button>
+          </div>
+          <span id="deployedStatus" class="muted small-inline" role="status" aria-live="polite">
+            Consent is off. Nothing is fetched until you tick consent and click Retrieve &amp; review.
+          </span>
+          <div id="deployedResult" class="deployed-result" hidden></div>
+
+          <div class="deployed-analysis-section" id="deployedAnalysisSection">
+            <div class="deployed-analysis-head">
+              <strong>Analyze retrieved source</strong>
+              <span class="muted small-inline">— same local analyzers as pasted code; runs only when you click</span>
+            </div>
+            <div class="field">
+              <button id="deployedAnalyzeBtn" type="button" disabled
+                      aria-describedby="deployedAnalyzeNote">Analyze retrieved source with local analyzers</button>
+            </div>
+            <span id="deployedAnalyzeNote" class="muted small-inline" role="status" aria-live="polite">
+              Retrieve a verified contract’s source first. The analyzers run only when you click their
+              button — never automatically, and never on lookup completion, address change, network
+              change, or result load.
+            </span>
+            <div id="deployedAnalysisSpinner" class="spinner hidden">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span id="deployedAnalysisElapsed">Analyzing retrieved source...</span>
+            </div>
+            <div id="deployedAnalysisError" class="error hidden"></div>
+            <div id="deployedAnalysis" class="deployed-analysis-result hidden"></div>
+            <div class="explain-panel hidden" id="deployedExplainPanel">
+              <div class="panel-header" style="padding-left:0;padding-right:0;border-bottom:none">
+                <h3 style="margin:0;font-size:13px">Explain selected retrieved-source finding</h3>
+                <div class="controls">
+                  <button id="explainDeployedFindingBtn" disabled>Explain with Qwen</button>
+                </div>
+              </div>
+              <div class="muted small" id="deployedSelectedFinding">No finding selected.</div>
+              <div id="deployedExplainContent" class="content pretext" style="margin-top:6px;max-height:200px;overflow:auto"></div>
+              <div id="deployedExplainSpinner" class="spinner hidden">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <span id="deployedExplainElapsed">Explaining...</span>
+              </div>
+              <div id="deployedExplainError" class="error hidden"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="right-panel">
+      <div class="panel" id="slitherPanel">
+        <div class="panel-header">
+          <h2>Static analysis — local analyzers <span class="muted tag">(deterministic tool output)</span></h2>
+          <div class="controls">
+            <span id="slitherStatus" class="badge">checking...</span>
+            <span id="solhintStatus" class="badge">checking...</span>
+            <button id="slitherBtn" disabled>Run Slither</button>
+            <button id="solhintBtn" disabled>Run Solhint</button>
+            <button id="exportReportBtn" disabled>Export report</button>
+          </div>
+        </div>
+        <div class="tool-note">
+          Each analyzer below runs <b>only</b> when you click its own Run button, on the source you
+          submitted — nothing runs automatically. Every finding is attributed to the tool that
+          produced it; the tools' results are never merged. These are static-analysis results only
+          and may be incomplete — a run with no findings does not mean the code is safe.
+        </div>
+        <div class="tool-block-head">
+          <span class="tool-name">Slither</span>
+          <span class="muted small-inline">symbolic analysis</span>
+        </div>
+        <div id="slitherSummary" class="content pretext">Run Slither to analyze the source with the local analyzer.</div>
+        <div id="slitherFindings" class="findings hidden"></div>
+        <div class="explain-panel" id="explainPanel">
+          <div class="panel-header" style="padding-left:0;padding-right:0;border-bottom:none">
+            <h3 style="margin:0;font-size:13px">Explain selected finding</h3>
+            <div class="controls">
+              <button id="explainFindingBtn" disabled>Explain with Qwen</button>
+            </div>
+          </div>
+          <div class="muted small" id="selectedFinding">No finding selected. Click a finding card above to select it.</div>
+          <div id="explainContent" class="content pretext" style="margin-top:6px;max-height:200px;overflow:auto"></div>
+          <div id="explainSpinner" class="spinner hidden">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span id="explainElapsed">Explaining...</span>
+          </div>
+          <div id="explainError" class="error hidden"></div>
+        </div>
+        <details id="slitherRawWrap" class="raw-wrap hidden">
+          <summary>Raw Slither output (bounded, paths redacted)</summary>
+          <pre id="slitherRaw" class="code"></pre>
+        </details>
+        <div class="tool-block-head">
+          <span class="tool-name">Solhint</span>
+          <span class="muted small-inline">Solidity linter</span>
+        </div>
+        <div id="solhintSummary" class="content pretext">Run Solhint to lint the source with the local linter.</div>
+        <div id="solhintFindings" class="findings hidden"></div>
+        <details id="solhintRawWrap" class="raw-wrap hidden">
+          <summary>Raw Solhint output (bounded, paths redacted)</summary>
+          <pre id="solhintRaw" class="code"></pre>
+        </details>
+        <div id="slitherSpinner" class="spinner hidden">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span id="slitherElapsed">Running Slither...</span>
+        </div>
+        <div id="slitherError" class="error hidden"></div>
+      </div>
+
+      <div class="panel" id="reviewPanel">
+        <div class="panel-header">
+          <h2>AI review / Finding explanation <span class="muted tag">(Qwen model explanation — not analyzer output)</span></h2>
+          <div class="controls">
+            <button id="copyReviewBtn" disabled>Copy</button>
+          </div>
+        </div>
+        <div class="ai-note">AI-generated guidance — requires human review. Explanations are not verified findings and do not constitute a security guarantee. Run the analyzers above for tool findings. AI output may be incomplete or incorrect and is not a complete security audit.</div>
+        <div id="reviewContent" class="content pretext">Run a review to see results here, or explain a selected finding.</div>
+        <div id="reviewSpinner" class="spinner hidden">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span id="reviewElapsed">Generating...</span>
+        </div>
+        <div id="reviewError" class="error hidden"></div>
+      </div>
+
+      <div class="panel" id="chatPanel">
+        <div class="panel-header">
+          <h2>Follow-up Q&amp;A</h2>
+          <div class="controls">
+            <button id="clearChatBtn">Clear chat</button>
+          </div>
+        </div>
+        <div id="chatHistory" class="content pretext"></div>
+        <div id="chatSpinner" class="spinner hidden">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span id="chatElapsed">Thinking...</span>
+        </div>
+        <div id="chatError" class="error hidden"></div>
+        <div id="chatProposal" class="proposal hidden"></div>
+        <div class="chat-tools">
+          <label class="mcp-toggle" title="Let the model request a local analyzer; it only runs if you approve it.">
+            <input type="checkbox" id="mcpToggle" />
+            Allow approved local tools (MCP)
+          </label>
+          <span id="mcpInfo" class="muted small-inline">checking tools...</span>
+        </div>
+        <div class="chat-input">
+          <textarea id="chatQuestion" rows="2" placeholder="Ask a follow-up question about the source..."></textarea>
+          <button id="chatBtn" disabled>Send</button>
+        </div>
+      </div>
+
+      <div class="panel" id="suggestPanel">
+        <div class="panel-header">
+          <h2>Suggested safer code <span class="muted">(never applied automatically)</span></h2>
+          <div class="controls">
+            <button id="copySuggestBtn" disabled>Copy</button>
+          </div>
+        </div>
+        <div class="ai-note">AI-generated suggestion — not verified by any security tool. Review before use; applied manually by you only.</div>
+        <div id="suggestNotes" class="content pretext"></div>
+        <pre id="suggestCode" class="code hidden"></pre>
+        <div id="suggestSpinner" class="spinner hidden">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span id="suggestElapsed">Generating suggestion...</span>
+        </div>
+        <div id="suggestError" class="error hidden"></div>
+        <div class="muted small">Suggested code appears here in a separate panel. It is not written back to the source.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Local-first (127.0.0.1): Qwen review + local Slither &amp; Solhint static analysis. Mythril/Echidna/Foundry tests are not integrated. AI review is triage, not a complete audit.</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

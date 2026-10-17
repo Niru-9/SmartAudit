@@ -1,0 +1,42 @@
+# Python caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local Python environments
+venv/
+.venv/
+
+# Node dependencies and logs
+node_modules/
+npm-debug.log*
+*.log
+
+# Local secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Generated build output
+dist/
+build/
+coverage/
+
+# Local model weights; keep prompts and configuration tracked
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# Local Solidity compiler binaries
+/tools/solc/*.exe
+
+# Existing temporary artifacts at the project root
+/action.md.temp
+/UTF8
